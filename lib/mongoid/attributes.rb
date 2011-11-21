@@ -6,6 +6,7 @@ module Mongoid #:nodoc:
   # This module contains the logic for handling the internal attributes hash,
   # and how to get and set values.
   module Attributes
+    extend ActiveSupport::Concern
     include Processing
 
     attr_reader :attributes
@@ -25,6 +26,7 @@ module Mongoid #:nodoc:
       attribute = read_attribute(name)
       ! attribute.blank? || attribute == false
     end
+    alias :has_attribute? :attribute_present?
 
     # Read a value from the document attributes. If the value does not exist
     # it will return nil.
@@ -55,9 +57,11 @@ module Mongoid #:nodoc:
     #
     # @since 1.0.0
     def remove_attribute(name)
-      access = name.to_s
-      attribute_will_change!(access)
-      attributes.delete(access)
+      _assigning do
+        access = name.to_s
+        attribute_will_change!(access)
+        attributes.delete(access)
+      end
     end
 
     # Override respond_to? so it responds properly for dynamic attributes.
@@ -92,13 +96,45 @@ module Mongoid #:nodoc:
     #
     # @since 1.0.0
     def write_attribute(name, value)
-      access = name.to_s
-      typed_value_for(access, value).tap do |value|
-        attribute_will_change!(access) unless attributes[access] == value
-        attributes[access] = value
+      _assigning do
+        access = name.to_s
+        localized = fields[access].try(:localized?)
+        typed_value_for(access, value).tap do |value|
+          unless attributes[access] == value || attribute_changed?(access)
+            attribute_will_change!(access)
+          end
+          if localized
+            (attributes[access] ||= {}).merge!(value)
+          else
+            attributes[access] = value
+          end
+        end
       end
     end
     alias :[]= :write_attribute
+
+    # Allows you to set all the attributes for a particular mass-assignment security role
+    # by passing in a hash of attributes with keys matching the attribute names
+    # (which again matches the column names)  and the role name using the :as option.
+    # To bypass mass-assignment security you can use the :without_protection => true option.
+    #
+    # @example Assign the attributes.
+    #   person.assign_attributes(:title => "Mr.")
+    #
+    # @example Assign the attributes (with a role).
+    #   person.assign_attributes({ :title => "Mr." }, :as => :admin)
+    #
+    # @param [ Hash ] attrs The new attributes to set.
+    # @param [ Hash ] options Supported options: :without_protection, :as
+    #
+    # @since 2.2.1
+    def assign_attributes(attrs = nil, options = {})
+      _assigning do
+        process(attrs, options[:as] || :default, !options[:without_protection]) do |document|
+          document.identify if new? && id.blank?
+        end
+      end
+    end
 
     # Writes the supplied attributes hash to the document. This will only
     # overwrite existing attributes if they are present in the new +Hash+, all
@@ -115,9 +151,7 @@ module Mongoid #:nodoc:
     #
     # @since 1.0.0
     def write_attributes(attrs = nil, guard_protected_attributes = true)
-      process(attrs, guard_protected_attributes) do |document|
-        document.identify if new? && id.blank?
-      end
+      assign_attributes(attrs, :without_protection => !guard_protected_attributes)
     end
     alias :attributes= :write_attributes
 
@@ -126,17 +160,16 @@ module Mongoid #:nodoc:
     # Set any missing default values in the attributes.
     #
     # @example Get the raw attributes after defaults have been applied.
-    #   person.apply_default_attributes
+    #   person.apply_defaults
     #
     # @return [ Hash ] The raw attributes.
     #
     # @since 2.0.0.rc.8
-    def apply_default_attributes
-      (@attributes ||= {}).tap do |h|
-        defaults.each_pair do |key, val|
-          unless h.has_key?(key)
-            h[key] = val.respond_to?(:call) ? typed_value_for(key, val.call) :
-              val.duplicable? ? val.dup : val
+    def apply_defaults
+      defaults.each do |name|
+        unless attributes.has_key?(name)
+          if field = fields[name]
+            attributes[name] = field.eval_default(self)
           end
         end
       end
@@ -169,6 +202,33 @@ module Mongoid #:nodoc:
     # @since 1.0.0
     def typed_value_for(key, value)
       fields.has_key?(key) ? fields[key].serialize(value) : value
+    end
+
+    module ClassMethods #:nodoc:
+
+      # Alias the provided name to the original field. This will provide an
+      # aliased getter, setter, existance check, and all dirty attribute
+      # methods.
+      #
+      # @example Alias the attribute.
+      #   class Product
+      #     include Mongoid::Document
+      #     field :price, :type => Float
+      #     alias_attribute :cost, :price
+      #   end
+      #
+      # @param [ Symbol ] name The new name.
+      # @param [ Symbol ] original The original name.
+      #
+      # @since 2.3.0
+      def alias_attribute(name, original)
+        class_eval <<-RUBY
+          alias :#{name} :#{original}
+          alias :#{name}= :#{original}=
+          alias :#{name}? :#{original}?
+        RUBY
+        super
+      end
     end
   end
 end

@@ -3,7 +3,7 @@ require "spec_helper"
 describe Mongoid::Criterion::Inclusion do
 
   before do
-    Person.delete_all
+    [ Person, Post, Product, Game, Jar ].each(&:delete_all)
   end
 
   describe "#all_in" do
@@ -25,6 +25,29 @@ describe Mongoid::Criterion::Inclusion do
   end
 
   describe "#any_in" do
+
+    context "when chaining after a where" do
+
+      let!(:person) do
+        Person.create(:ssn => "423-11-1111", :title => "sir")
+      end
+
+      let(:criteria) do
+        Person.where(:title => "sir")
+      end
+
+      let(:from_db) do
+        criteria.any_in(:title => [ "sir", "madam" ])
+      end
+
+      it "returns the correct documents" do
+        from_db.should eq([ person ])
+      end
+
+      it "contains the overridden selector" do
+        from_db.selector.should eq({ :title => { "$in" => [ "sir", "madam" ] } })
+      end
+    end
 
     context "when the field value is nil" do
 
@@ -132,6 +155,56 @@ describe Mongoid::Criterion::Inclusion do
     end
   end
 
+  describe "#all_of" do
+
+    let!(:person_one) do
+      Person.create(:ssn => "354-12-1221")
+    end
+
+    let!(:person_two) do
+      Person.create(:ssn => "354-12-1222")
+    end
+
+    context "when providing object ids" do
+
+      let(:from_db) do
+        Person.all_of(
+          { :_id.in => [ person_one.id, person_two.id ] },
+          { :_id => person_two.id }
+        )
+      end
+
+      it "returns the matching documents" do
+        from_db.should eq([ person_two ])
+      end
+    end
+
+    context "when providing string ids" do
+
+      let(:from_db) do
+        Person.all_of(
+          { :_id.in => [ person_one.id.to_s, person_two.id.to_s ] },
+          { :_id => person_two.id.to_s }
+        )
+      end
+
+      it "returns the matching documents" do
+        from_db.should eq([ person_two ])
+      end
+    end
+
+    context "when providing no expressions" do
+
+      let(:from_db) do
+        Person.all_of()
+      end
+
+      it "returns all documents" do
+        from_db.should eq([ person_one, person_two ])
+      end
+    end
+  end
+
   describe "#find" do
 
     let!(:person) do
@@ -199,6 +272,32 @@ describe Mongoid::Criterion::Inclusion do
 
     context "when finding by an array of ids" do
 
+      context "when ids are not object ids" do
+
+        let!(:jar_one) do
+          Jar.create(:_id => 114869287646134350)
+        end
+
+        let!(:jar_two) do
+          Jar.create(:_id => 114869287646134388)
+        end
+
+        let!(:jar_three) do
+          Jar.create(:_id => 114869287646134398)
+        end
+
+        context "when the documents are found" do
+
+          let(:jars) do
+            Jar.find([ jar_one.id, jar_two.id, jar_three.id ])
+          end
+
+          it "returns the documents from the database" do
+            jars.should eq([ jar_one, jar_two, jar_three ])
+          end
+        end
+      end
+
       context "when the id is found" do
 
         let!(:from_db) do
@@ -239,6 +338,165 @@ describe Mongoid::Criterion::Inclusion do
             from_db.should be_empty
           end
         end
+      end
+    end
+  end
+
+  describe "#includes" do
+
+    before do
+      Mongoid.identity_map_enabled = true
+    end
+
+    after do
+      Mongoid.identity_map_enabled = false
+    end
+
+    let!(:person) do
+      Person.create(:ssn => "123-12-1211")
+    end
+
+    context "when including a has many" do
+
+      let!(:post_one) do
+        person.posts.create(:title => "one")
+      end
+
+      let!(:post_two) do
+        person.posts.create(:title => "two")
+      end
+
+      before do
+        Mongoid::IdentityMap.clear
+      end
+
+      let!(:criteria) do
+        Person.includes(:posts).entries
+      end
+
+      it "returns the correct documents" do
+        criteria.should eq([ person ])
+      end
+
+      it "inserts the first document into the identity map" do
+        Mongoid::IdentityMap[Post][post_one.id].should eq(post_one)
+      end
+
+      it "inserts the second document into the identity map" do
+        Mongoid::IdentityMap[Post][post_two.id].should eq(post_two)
+      end
+    end
+
+    context "when including a has one" do
+
+      let!(:game_one) do
+        person.create_game(:name => "one")
+      end
+
+      let!(:game_two) do
+        person.create_game(:name => "two")
+      end
+
+      before do
+        Mongoid::IdentityMap.clear
+      end
+
+      let!(:criteria) do
+        Person.includes(:game).entries
+      end
+
+      it "returns the correct documents" do
+        criteria.should eq([ person ])
+      end
+
+      it "inserts the first document into the identity map" do
+        Mongoid::IdentityMap[Game][game_one.id].should eq(game_one)
+      end
+
+      it "inserts the second document into the identity map" do
+        Mongoid::IdentityMap[Game][game_two.id].should eq(game_two)
+      end
+    end
+
+    context "when including a belongs to" do
+
+      let(:person_two) do
+        Person.create(:ssn => "243-11-0978")
+      end
+
+      let!(:game_one) do
+        person.create_game(:name => "one")
+      end
+
+      let!(:game_two) do
+        person_two.create_game(:name => "two")
+      end
+
+      before do
+        Mongoid::IdentityMap.clear
+      end
+
+      let!(:criteria) do
+        Game.includes(:person).entries
+      end
+
+      it "returns the correct documents" do
+        criteria.should eq([ game_one, game_two ])
+      end
+
+      it "inserts the first document into the identity map" do
+        Mongoid::IdentityMap[Person][person.id].should eq(person)
+      end
+
+      it "inserts the second document into the identity map" do
+        Mongoid::IdentityMap[Person][person_two.id].should eq(person_two)
+      end
+    end
+
+    context "when including multiples in the same criteria" do
+
+      let!(:post_one) do
+        person.posts.create(:title => "one")
+      end
+
+      let!(:post_two) do
+        person.posts.create(:title => "two")
+      end
+
+      let!(:game_one) do
+        person.create_game(:name => "one")
+      end
+
+      let!(:game_two) do
+        person.create_game(:name => "two")
+      end
+
+      before do
+        Mongoid::IdentityMap.clear
+      end
+
+      let!(:criteria) do
+        Person.includes(:posts, :game).entries
+      end
+
+      it "returns the correct documents" do
+        criteria.should eq([ person ])
+      end
+
+      it "inserts the first has many document into the identity map" do
+        Mongoid::IdentityMap[Post][post_one.id].should eq(post_one)
+      end
+
+      it "inserts the second has many document into the identity map" do
+        Mongoid::IdentityMap[Post][post_two.id].should eq(post_two)
+      end
+
+      it "inserts the first has one document into the identity map" do
+        Mongoid::IdentityMap[Game][game_one.id].should eq(game_one)
+      end
+
+      it "inserts the second has one document into the identity map" do
+        Mongoid::IdentityMap[Game][game_two.id].should eq(game_two)
       end
     end
   end
@@ -289,6 +547,80 @@ describe Mongoid::Criterion::Inclusion do
         :aliases => [ "D", "Durran" ],
         :things => [ { :phone => 'HTC Incredible' } ]
       )
+    end
+
+    context "when passing in a range" do
+
+      let!(:baby) do
+        Person.create(:ssn => "123-12-1212", :dob => Date.new(2011, 1, 1))
+      end
+
+      let!(:adult) do
+        Person.create(:ssn => "124-12-1212", :dob => Date.new(1980, 1, 1))
+      end
+
+      context "when the range matches documents" do
+
+        let(:range) do
+          Date.new(1970, 1, 1)..Date.new(2012, 1, 1)
+        end
+
+        let(:criteria) do
+          Person.where(:dob => range)
+        end
+
+        it "includes the lower range value" do
+          criteria.should include(baby)
+        end
+
+        it "includes the higher range value" do
+          criteria.should include(adult)
+        end
+      end
+
+      context "when the range does not match documents" do
+
+        let(:range) do
+          Date.new(2012, 1, 1)..Date.new(2014, 1, 1)
+        end
+
+        let(:criteria) do
+          Person.where(:dob => range)
+        end
+
+        it "returns an empty result" do
+          criteria.should be_empty
+        end
+      end
+    end
+
+    context "when searching for localized fields" do
+
+      let!(:soda) do
+        Product.create(:description => "sweet")
+      end
+
+      let!(:beer) do
+        Product.create(:description => "hoppy")
+      end
+
+      before do
+        ::I18n.locale = :de
+        soda.update_attribute(:description, "suss")
+        beer.update_attribute(:description, "hopfig")
+      end
+
+      let(:results) do
+        Product.where(:description => "hopfig")
+      end
+
+      after do
+        ::I18n.locale = :en
+      end
+
+      it "returns the results matching the correct locale" do
+        results.should eq([ beer ])
+      end
     end
 
     context "when providing 24 character strings" do

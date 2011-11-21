@@ -10,6 +10,10 @@ describe Mongoid::Persistence::Atomic::Pop do
     person.stubs(:collection).returns(collection)
   end
 
+  after do
+    person.unstub(:collection)
+  end
+
   describe "#persist" do
 
     context "when the field exists" do
@@ -28,7 +32,7 @@ describe Mongoid::Persistence::Atomic::Pop do
           person.new_record = false
           collection.expects(:update).with(
             person.atomic_selector,
-            { "$pop" => { :aliases => -1 } },
+            { "$pop" => { "aliases" => -1 } },
             { :safe => false }
           )
         end
@@ -60,7 +64,7 @@ describe Mongoid::Persistence::Atomic::Pop do
           person.new_record = false
           collection.expects(:update).with(
             person.atomic_selector,
-            { "$pop" => { :aliases => 1 } },
+            { "$pop" => { "aliases" => 1 } },
             { :safe => false }
           )
         end

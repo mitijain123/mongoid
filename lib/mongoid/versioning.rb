@@ -15,12 +15,12 @@ module Mongoid #:nodoc:
         :class_name => self.name,
         :validate => false,
         :cyclic => true,
+        :inverse_of => nil,
         :versioned => true
 
       set_callback :save, :before, :revise, :if => :revisable?
 
       class_attribute :version_max
-      delegate :version_max, :to => "self.class"
       self.cyclic = true
     end
 
@@ -35,11 +35,58 @@ module Mongoid #:nodoc:
     # @since 1.0.0
     def revise
       previous = previous_revision
-      if previous && changed?
-        new_version = versions.build(previous.attributes.except("versions"))
-        versions.shift if version_max.present? && versions.length > version_max
+      if previous && versioned_attributes_changed?
+        versions.build(previous.versioned_attributes).attributes.delete("_id")
+        if version_max.present? && versions.length > version_max
+          versions.delete(versions.first)
+        end
         self.version = (version || 1 ) + 1
       end
+    end
+
+    # Forces the creation of a new version of the +Document+, regardless of
+    # whether a change was actually made.
+    #
+    # @example Revise the document.
+    #   person.revise!
+    #
+    # @since 2.2.1
+    def revise!
+      new_version = versions.build((previous_revision || self).versioned_attributes)
+      versions.shift if version_max.present? && versions.length > version_max
+      self.version = (version || 1 ) + 1
+      save
+    end
+
+    # Filters the results of +changes+ by removing any fields that should
+    # not be versioned.
+    #
+    # @return [ Hash ] A hash of versioned changed attributes.
+    #
+    # @since 2.1.0
+    def versioned_changes
+      only_versioned_attributes(changes)
+    end
+
+    # Filters the results of +attributes+ by removing any fields that should
+    # not be versioned.
+    #
+    # @return [ Hash ] A hash of versioned attributes.
+    #
+    # @since 2.1.0
+    def versioned_attributes
+      only_versioned_attributes(attributes)
+    end
+
+    # Check if any versioned fields have been modified. This is similar
+    # to +changed?+, except this method also ignores fields set to be
+    # ignored by versioning.
+    #
+    # @return [ Boolean ] Whether fields that will be versioned have changed.
+    #
+    # @since 2.1.0
+    def versioned_attributes_changed?
+      !versioned_changes.empty?
     end
 
     # Executes a block that temporarily disables versioning. This is for cases
@@ -70,9 +117,11 @@ module Mongoid #:nodoc:
     #
     # @since 2.0.0
     def previous_revision
-      self.class.
-        where(:_id => id).
-        any_of({ :version => version }, { :version => nil }).first
+      _loading_revision do
+        self.class.
+          where(:_id => id).
+          any_of({ :version => version }, { :version => nil }).first
+      end
     end
 
     # Is the document able to be revised? This is true if the document has
@@ -85,7 +134,7 @@ module Mongoid #:nodoc:
     #
     # @since 2.0.0
     def revisable?
-      changed? && !versionless?
+      versioned_attributes_changed? && !versionless?
     end
 
     # Are we in versionless mode? This is true if in a versionless block on the
@@ -99,6 +148,23 @@ module Mongoid #:nodoc:
     # @since 2.0.0
     def versionless?
       !!@versionless
+    end
+
+    # Filters fields that should not be versioned out of an attributes hash.
+    # Dynamic attributes are always versioned.
+    #
+    # @param [ Hash ] A hash with field names as keys.
+    #
+    # @return [ Hash ] The hash without non-versioned columns.
+    #
+    # @since 2.1.0
+    def only_versioned_attributes(hash)
+      {}.tap do |versioned|
+        hash.except("versions").each_pair do |name, value|
+          field = fields[name]
+          versioned[name] = value if !field || field.versioned?
+        end
+      end
     end
 
     module ClassMethods #:nodoc:

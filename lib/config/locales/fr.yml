@@ -4,8 +4,15 @@ fr:
       messages:
         taken:
           est déjà pris.
+        callbacks:
+          "Calling %{method} on %{klass} resulted in a false return from a callback."
         document_not_found:
           Document introuvable pour la classe %{klass} avec les ids %{identifiers}.
+        eager_load:
+          "Eager loading :%{name} is not supported due to it being a many-to-many
+          or polymorphic belongs_to relation."
+        invalid_time:
+          "'%{value}' is not a valid Time."
         invalid_database:
           La base de données doit être une Mongo::DB, pas %{name}.
         invalid_type:
@@ -43,3 +50,6 @@ fr:
         unsaved_document:
           You cannot call create or create! through a relational association
           relation (%{document}) who's parent (%{base}) is not already saved.
+        mixed_relations:
+          Referencing a(n) %{embedded} document from the %{root} document via a
+          relational association is not allowed since the %{embedded} is embedded.

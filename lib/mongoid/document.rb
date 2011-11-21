@@ -7,9 +7,7 @@ module Mongoid #:nodoc:
     extend ActiveSupport::Concern
     include Mongoid::Components
 
-    included do
-      attr_reader :new_record
-    end
+    attr_reader :new_record
 
     # Default comparison is via the string version of the id.
     #
@@ -46,7 +44,7 @@ module Mongoid #:nodoc:
     #
     # @return [ true, false ] True if the classes are equal, false if not.
     def ===(other)
-      self.class == other.class
+      other.is_a?(self.class)
     end
 
     # Delegates to ==. Used when needing checks in hashes.
@@ -121,60 +119,21 @@ module Mongoid #:nodoc:
     #   Person.new(:title => "Sir")
     #
     # @param [ Hash ] attrs The attributes to set up the document with.
+    # @param [ Hash ] options A mass-assignment protection options. Supports
+    #   :as and :without_protection
     #
     # @return [ Document ] A new document.
-    def initialize(attrs = nil)
-      @new_record = true
-      @attributes = apply_default_attributes
-      process(attrs) do
-        yield self if block_given?
-        identify
-      end
-      run_callbacks(:initialize) { self }
-    end
-
-    # Reloads the +Document+ attributes from the database. If the document has
-    # not been saved then an error will get raised if the configuration option
-    # was set.
-    #
-    # @example Reload the document.
-    #   person.reload
-    #
-    # @raise [ Errors::DocumentNotFound ] If the document was deleted.
-    #
-    # @return [ Document ] The document, reloaded.
-    def reload
-      reloaded = collection.find_one(:_id => id)
-      if Mongoid.raise_not_found_error
-        raise Errors::DocumentNotFound.new(self.class, id) if reloaded.nil?
-      end
-      @attributes = {}.merge(reloaded || {})
-      changed_attributes.clear
-      apply_default_attributes
-      tap do
-        relations.keys.each do |name|
-          if instance_variable_defined?("@#{name}")
-            remove_instance_variable("@#{name}")
-          end
+    def initialize(attrs = nil, options = nil)
+      _building do
+        @new_record = true
+        @attributes ||= {}
+        options ||= {}
+        process(attrs, options[:as] || :default, !options[:without_protection]) do
+          identify
+          apply_defaults
+          yield(self) if block_given?
         end
-      end
-    end
-
-    # Remove a child document from this parent. If an embeds one then set to
-    # nil, otherwise remove from the embeds many.
-    #
-    # This is called from the +RemoveEmbedded+ persistence command.
-    #
-    # @example Remove the child.
-    #   document.remove_child(child)
-    #
-    # @param [ Document ] child The child (embedded) document to remove.
-    def remove_child(child)
-      name = child.metadata.name
-      if child.embedded_one?
-        remove_instance_variable("@#{name}") if instance_variable_defined?("@#{name}")
-      else
-        send(name).delete(child)
+        run_callbacks(:initialize) { self }
       end
     end
 
@@ -200,7 +159,7 @@ module Mongoid #:nodoc:
       attributes.tap do |attrs|
         relations.each_pair do |name, meta|
           if meta.embedded?
-            relation = send(name, false, :continue => false)
+            relation = send(name)
             attrs[name] = relation.as_document unless relation.blank?
           end
         end
@@ -220,14 +179,37 @@ module Mongoid #:nodoc:
     # @return [ Document ] An instance of the specified class.
     def becomes(klass)
       unless klass.include?(Mongoid::Document)
-        raise ArgumentError, 'A class which includes Mongoid::Document is expected'
+        raise ArgumentError, "A class which includes Mongoid::Document is expected"
       end
-      klass.new.tap do |became|
-        became.instance_variable_set('@attributes', @attributes)
-        became.instance_variable_set('@errors', @errors)
-        became.instance_variable_set('@new_record', new_record?)
-        became.instance_variable_set('@destroyed', destroyed?)
+      klass.instantiate(frozen? ? attributes.dup : attributes).tap do |became|
+        became.instance_variable_set(:@errors, errors)
+        became.instance_variable_set(:@new_record, new_record?)
+        became.instance_variable_set(:@destroyed, destroyed?)
+        became._type = klass.to_s
       end
+    end
+
+    private
+
+    # Returns the logger
+    #
+    # @return [ Logger ] The configured logger or a default Logger instance.
+    #
+    # @since 2.2.0
+    def logger
+      Mongoid.logger
+    end
+
+    # Implement this for calls to flatten on array.
+    #
+    # @example Get the document as an array.
+    #   document.to_ary
+    #
+    # @return [ nil ] Always nil.
+    #
+    # @since 2.1.0
+    def to_ary
+      nil
     end
 
     module ClassMethods #:nodoc:
@@ -259,7 +241,8 @@ module Mongoid #:nodoc:
         attributes = attrs || {}
         allocate.tap do |doc|
           doc.instance_variable_set(:@attributes, attributes)
-          doc.send(:apply_default_attributes)
+          doc.send(:apply_defaults)
+          IdentityMap.set(doc) unless _loading_revision?
           doc.run_callbacks(:initialize) { doc }
         end
       end
@@ -275,8 +258,22 @@ module Mongoid #:nodoc:
       end
 
       # Set the i18n scope to overwrite ActiveModel.
+      #
+      # @return [ Symbol ] :mongoid
       def i18n_scope
         :mongoid
+      end
+
+      # Returns the logger
+      #
+      # @example Get the logger.
+      #   Person.logger
+      #
+      # @return [ Logger ] The configured logger or a default Logger instance.
+      #
+      # @since 2.2.0
+      def logger
+        Mongoid.logger
       end
     end
   end

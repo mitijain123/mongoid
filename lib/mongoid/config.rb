@@ -48,13 +48,12 @@ module Mongoid #:nodoc
 
     option :allow_dynamic_fields, :default => true
     option :autocreate_indexes, :default => false
-    option :binding_defaults, :default => { :binding => false, :continue => true }
-    option :embedded_object_id, :default => true
+    option :identity_map_enabled, :default => false
     option :include_root_in_json, :default => false
     option :max_retries_on_connection_failure, :default => 0
     option :parameterize_keys, :default => true
     option :persist_in_safe_mode, :default => false
-    option :preload_models, :default => true
+    option :preload_models, :default => false
     option :raise_not_found_error, :default => true
     option :skip_version_check, :default => false
     option :time_zone, :default => nil
@@ -103,12 +102,7 @@ module Mongoid #:nodoc
     #
     # @return [ Array<String> ] An array of bad field names.
     def destructive_fields
-      @destructive_fields ||= lambda {
-        klass = Class.new do
-          include Mongoid::Document
-        end
-        klass.instance_methods(true).collect { |method| method.to_s }
-      }.call
+      Components.prohibited_methods
     end
 
     # Configure mongoid from a hash. This is usually called after parsing a
@@ -171,7 +165,12 @@ module Mongoid #:nodoc
     #
     # @return [ Logger ] The newly set logger.
     def logger=(logger)
-      @logger = logger
+      case logger
+      when false, nil then @logger = nil
+      when true then @logger = default_logger
+      else
+        @logger = logger if logger.respond_to?(:info)
+      end
     end
 
     # Purge all data in all collections, including indexes.
@@ -207,7 +206,7 @@ module Mongoid #:nodoc
     # set is not a valid +Mongo::DB+, then an error will be raised.
     #
     # @example Set the master database.
-    #   config.master = Mongo::Connection.db("test")
+    #   config.master = Mongo::Connection.new.db("test")
     #
     # @param [ Mongo::DB ] db The master database.
     #

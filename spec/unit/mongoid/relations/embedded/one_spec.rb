@@ -49,53 +49,10 @@ describe Mongoid::Relations::Embedded::One do
     end
   end
 
-  describe "#bind" do
-
-    let(:relation) do
-      described_class.new(base, target, metadata)
-    end
-
-    before do
-      binding_klass.expects(:new).returns(binding)
-      binding.expects(:bind).returns(true)
-    end
-
-    context "when building" do
-
-      it "does not save the document" do
-        target.expects(:save).never
-        relation.bind(:continue => true)
-      end
-    end
-
-    context "when not building" do
-
-      context "when the base is persisted" do
-
-        before do
-          base.expects(:persisted?).returns(true)
-        end
-
-        it "saves the target" do
-          target.expects(:save).returns(true)
-          relation.bind(:continue => true)
-        end
-      end
-
-      context "when the base is not persisted" do
-
-        it "does not save the target" do
-          target.expects(:save).never
-          relation.bind(:continue => true)
-        end
-      end
-    end
-  end
-
   describe ".builder" do
 
     it "returns the embedded one builder" do
-      described_class.builder(metadata, target).should be_a(builder_klass)
+      described_class.builder(base, metadata, target).should be_a(builder_klass)
     end
   end
 
@@ -136,91 +93,32 @@ describe Mongoid::Relations::Embedded::One do
     end
   end
 
-  describe "#substitute" do
+  describe "#respond_to?" do
 
-    let(:relation) do
-      described_class.new(base, target, metadata)
+    let(:person) do
+      Person.new
     end
 
-    context "when passing a document" do
-
-      let(:document) do
-        Name.new(:first_name => "Durran")
-      end
-
-      before do
-        binding_klass.expects(:new).returns(binding)
-        binding.expects(:bind).returns(true)
-        @substitute = relation.substitute(document)
-      end
-
-      it "sets a new target" do
-        relation.target.should == document
-      end
-
-      it "returns the relation" do
-        @substitute.should == relation
-      end
+    let!(:name) do
+      person.build_name(:first_name => "Tony")
     end
 
-    context "when passing nil" do
-
-      before do
-        binding_klass.expects(:new).returns(binding)
-        binding.expects(:unbind)
-        @substitute = relation.substitute(nil)
-      end
-
-      it "sets a new target" do
-        relation.target.should == nil
-      end
-
-      it "returns the relation" do
-        @substitute.should be_nil
-      end
-    end
-  end
-
-  describe "#unbind" do
-
-    let(:relation) do
-      described_class.new(base, target, metadata)
+    let(:document) do
+      person.name
     end
 
-    context "when the base is persisted" do
+    Mongoid::Document.public_instance_methods(true).each do |method|
 
-      context "when the target has not been destroyed" do
+      context "when checking #{method}" do
 
-        before do
-          base.expects(:persisted?).returns(true)
-        end
-
-        it "deletes the target" do
-          target.expects(:delete).returns(true)
-          relation.unbind(target, :continue => true)
-        end
-      end
-
-      context "when the target is already destroyed" do
-
-        before do
-          base.expects(:persisted?).returns(true)
-          target.expects(:destroyed?).returns(true)
-        end
-
-        it "does not delete the target" do
-          target.expects(:delete).never
-          relation.unbind(target, :continue => true)
+        it "returns true" do
+          document.respond_to?(method).should be_true
         end
       end
     end
 
-    context "when the base is not persisted" do
-
-      it "does not delete the target" do
-        target.expects(:delete).never
-        relation.unbind(target, :continue => true)
-      end
+    it "responds to persisted?" do
+      document.should respond_to(:persisted?)
     end
   end
 
@@ -228,7 +126,14 @@ describe Mongoid::Relations::Embedded::One do
 
     it "returns the valid options" do
       described_class.valid_options.should ==
-        [ :as, :cyclic ]
+        [ :as, :cascade_callbacks, :cyclic ]
+    end
+  end
+
+  describe ".validation_default" do
+
+    it "returns true" do
+      described_class.validation_default.should eq(true)
     end
   end
 end

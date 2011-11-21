@@ -59,9 +59,10 @@ module Rails #:nodoc:
       #
       initializer "setup database" do
         config_file = Rails.root.join("config", "mongoid.yml")
-        if config_file.file?
-          settings = YAML.load(ERB.new(config_file.read).result)[Rails.env]
-          ::Mongoid.from_hash(settings) if settings.present?
+        # @todo: Durran: Remove extra check when #1291 complete.
+        if config_file.file? &&
+          YAML.load(ERB.new(File.read(config_file)).result)[Rails.env].values.flatten.any?
+          ::Mongoid.load!(config_file)
         end
       end
 
@@ -76,17 +77,6 @@ module Rails #:nodoc:
         end
       end
 
-      # Due to all models not getting loaded and messing up inheritance queries
-      # and indexing, we need to preload the models in order to address this.
-      #
-      # This will happen every request in development, once in ther other
-      # environments.
-      initializer "preload all application models" do |app|
-        config.to_prepare do
-          ::Rails::Mongoid.load_models(app) unless $rails_rake_task
-        end
-      end
-
       # Set the proper error types for Rails. DocumentNotFound errors should be
       # 404s and not 500s, validation errors are 422s.
       initializer "load http errors" do |app|
@@ -98,13 +88,35 @@ module Rails #:nodoc:
         end
       end
 
+      # Due to all models not getting loaded and messing up inheritance queries
+      # and indexing, we need to preload the models in order to address this.
+      #
+      # This will happen every request in development, once in ther other
+      # environments.
+      initializer "preload all application models" do |app|
+        config.to_prepare do
+          if $rails_rake_task
+            # We previously got rid of this, however in the case where
+            # threadsafe! is enabled we must load all models so things like
+            # creating indexes works properly.
+            ::Rails::Mongoid.load_models(app)
+          else
+            ::Rails::Mongoid.preload_models(app)
+          end
+        end
+      end
+
+      # Need to include the Mongoid identity map middleware.
+      initializer "include the identity map" do |app|
+        app.config.middleware.use "Rack::Mongoid::Middleware::IdentityMap"
+      end
+
       # Instantitate any registered observers after Rails initialization and
       # instantiate them after being reloaded in the development environment
       initializer "instantiate observers" do
         config.after_initialize do
-          ::Mongoid.instantiate_observers
-
-          ActionDispatch::Callbacks.to_prepare do
+          ::Mongoid::instantiate_observers
+          ActionDispatch::Reloader.to_prepare do
             ::Mongoid.instantiate_observers
           end
         end

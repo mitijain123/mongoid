@@ -10,6 +10,10 @@ describe Mongoid::Persistence::Atomic::Push do
     person.stubs(:collection).returns(collection)
   end
 
+  after do
+    person.unstub(:collection)
+  end
+
   describe "#persist" do
 
     context "when the field exists" do
@@ -24,7 +28,7 @@ describe Mongoid::Persistence::Atomic::Push do
 
       before do
         collection.expects(:update).with(
-          person.atomic_selector, { "$push" => { :aliases => "Bond" } }, { :safe => false }
+          person.atomic_selector, { "$push" => { "aliases" => "Bond" } }, { :safe => false }
         )
       end
 
@@ -57,7 +61,7 @@ describe Mongoid::Persistence::Atomic::Push do
 
       before do
         collection.expects(:update).with(
-          person.atomic_selector, { "$push" => { :aliases => "Bond" } }, { :safe => false }
+          person.atomic_selector, { "$push" => { "aliases" => "Bond" } }, { :safe => false }
         )
       end
 

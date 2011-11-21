@@ -3,7 +3,7 @@ require "spec_helper"
 describe Mongoid::Fields::Serializable::DateTime do
 
   let(:field) do
-    described_class.new(:test, :type => DateTime)
+    described_class.instantiate(:test, :type => DateTime)
   end
 
   let!(:time) do
@@ -21,6 +21,23 @@ describe Mongoid::Fields::Serializable::DateTime do
 
     it "converts to a datetime" do
       field.deserialize(time).should be_kind_of(DateTime)
+    end
+  end
+
+  describe "#serialize" do
+
+    # This is ridiculous - Ruby 1.8.x returns the current time when calling
+    # parse with a string that is not the time.
+    unless RUBY_VERSION =~ /1.8/
+
+      context "when the string is an invalid time" do
+
+        it "raises an error" do
+          expect {
+            field.serialize("shitty time")
+          }.to raise_error(Mongoid::Errors::InvalidTime)
+        end
+      end
     end
   end
 end

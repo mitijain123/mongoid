@@ -32,6 +32,17 @@ module Mongoid #:nodoc:
         [@key, @operator].hash
       end
 
+      # Create a mongo query with given value
+      #
+      # @example Create query
+      #   criterion.to_mongo_hash(value)
+      #
+      # @params [] Whatever is a valid input for given operator
+      # @return [ Hash ] The query
+      def to_mongo_query(v)
+        {"$#{self.operator}" => v}
+      end
+
       # Is the criterion equal to the other?
       #
       # @example Check equality.
@@ -55,6 +66,18 @@ module Mongoid #:nodoc:
       def ==(other)
         return false unless other.is_a?(self.class)
         self.key == other.key && self.operator == other.operator
+      end
+
+      # Returns the name of the key as a string.
+      #
+      # @example Get the name of the key.
+      #   criterion.to_s
+      #
+      # @return [ String ] The field name.
+      #
+      # @since 2.1.0
+      def to_s
+        key.to_s
       end
     end
   end

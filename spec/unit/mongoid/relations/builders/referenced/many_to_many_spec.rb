@@ -2,18 +2,23 @@ require "spec_helper"
 
 describe Mongoid::Relations::Builders::Referenced::ManyToMany do
 
+  let(:base) do
+    stub
+  end
+
   describe "#build" do
 
     let(:metadata) do
       stub_everything(
         :klass => Post,
         :name => :posts,
-        :foreign_key => "post_ids"
+        :foreign_key => "post_ids",
+        :criteria => [ post ]
       )
     end
 
     let(:builder) do
-      described_class.new(metadata, object)
+      described_class.new(base, metadata, object)
     end
 
     context "when provided ids" do
@@ -34,23 +39,21 @@ describe Mongoid::Relations::Builders::Referenced::ManyToMany do
         builder.build
       end
 
-      before do
-        Post.expects(:find).with(object).returns([ post ])
-      end
-
       it "sets the documents" do
         documents.should == [ post ]
       end
     end
 
     context "when order specified" do
+
       let(:metadata) do
         stub_everything(
           :klass => Post,
           :name => :posts,
           :foreign_key => "person_id",
           :inverse_klass => Person,
-          :order => :rating.asc
+          :order => :rating.asc,
+          :criteria => [ post ]
         )
       end
 
@@ -59,7 +62,7 @@ describe Mongoid::Relations::Builders::Referenced::ManyToMany do
       end
 
       let(:object) do
-        object_id
+        [ object_id ]
       end
 
       let(:post) do
@@ -67,9 +70,6 @@ describe Mongoid::Relations::Builders::Referenced::ManyToMany do
       end
 
       before do
-        criteria = stub
-        criteria.expects(:find).returns([ post ])
-        Post.expects(:order_by).returns(criteria)
         @documents = builder.build
       end
 
@@ -86,6 +86,10 @@ describe Mongoid::Relations::Builders::Referenced::ManyToMany do
           [ Post.new ]
         end
 
+        let(:post) do
+          stub
+        end
+
         let!(:documents) do
           builder.build
         end
@@ -96,6 +100,15 @@ describe Mongoid::Relations::Builders::Referenced::ManyToMany do
       end
 
       context "when the object is nil" do
+
+        let(:metadata) do
+          stub_everything(
+            :klass => Post,
+            :name => :posts,
+            :foreign_key => "post_ids",
+            :criteria => nil
+          )
+        end
 
         let(:object) do
           nil

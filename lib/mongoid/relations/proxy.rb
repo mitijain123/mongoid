@@ -5,17 +5,19 @@ module Mongoid # :nodoc:
     # This class is the superclass for all relation proxy objects, and contains
     # common behaviour for all of them.
     class Proxy
+      include Threaded::Lifecycle
 
       # We undefine most methods to get them sent through to the target.
       instance_methods.each do |method|
         undef_method(method) unless
-          method =~ /(^__|^send$|^object_id$|^extend$|^tap$)/
+          method =~ /(^__|^send$|^object_id$|^extend$|^respond_to\?$|^tap$)/
       end
 
       attr_accessor :base, :loaded, :metadata, :target
 
       # Backwards compatibility with Mongoid beta releases.
       delegate :klass, :to => :metadata
+      delegate :bind_one, :unbind_one, :to => :binding
 
       # Convenience for setting the target and the metadata properties since
       # all proxies will need to do this.
@@ -28,10 +30,23 @@ module Mongoid # :nodoc:
       # @param [ Metadata ] metadata The relation's metadata.
       #
       # @since 2.0.0.rc.1
-      def init(base, target, metadata, &block)
+      def init(base, target, metadata)
         @base, @target, @metadata = base, target, metadata
-        block.call if block
+        yield(self) if block_given?
         extend metadata.extension if metadata.extension?
+      end
+
+      # The default substitutable object for a relation proxy is the clone of
+      # the target.
+      #
+      # @example Get the substitutable.
+      #   proxy.substitutable
+      #
+      # @return [ Object ] A clone of the target.
+      #
+      # @since 2.1.6
+      def substitutable
+        target
       end
 
       protected
@@ -63,31 +78,6 @@ module Mongoid # :nodoc:
       # @since 2.0.0.rc.1
       def instantiated(type = nil)
         type ? type.new : metadata.klass.new
-      end
-
-      # Determines if the target been loaded into memory or not.
-      #
-      # @example Is the proxy loaded?
-      #   proxy.loaded?
-      #
-      # @return [ true, false ] True if loaded, false if not.
-      #
-      # @since 2.0.0.rc.1
-      def loaded?
-        !!@loaded
-      end
-
-      # Takes the supplied documents and sets the metadata on them. Used when
-      # creating new documents and adding them to the relation.
-      #
-      # @example Set the metadata.
-      #   proxy.characterize(addresses)
-      #
-      # @param [ Array<Document> ] documents The documents to set metadata on.
-      #
-      # @since 2.0.0.rc.4
-      def characterize(documents)
-        documents.each { |doc| characterize_one(doc) }
       end
 
       # Takes the supplied document and sets the metadata on it.
@@ -137,6 +127,18 @@ module Mongoid # :nodoc:
       # @since 2.0.0.rc.6
       def raise_unsaved(doc)
         raise Errors::UnsavedDocument.new(base, doc)
+      end
+
+      # Get the class of the root document in the hierarchy.
+      #
+      # @example Get the root's class.
+      #   proxy.root_class
+      #
+      # @return [ Class ] The root class.
+      #
+      # @since 2.1.8
+      def root_class
+        @root_class ||= base._root.class
       end
     end
   end

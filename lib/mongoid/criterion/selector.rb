@@ -30,6 +30,7 @@ module Mongoid #:nodoc:
       #
       # @since 2.0.0
       def []=(key, value)
+        key = "#{key}.#{::I18n.locale}" if klass.fields[key.to_s].try(:localized?)
         super(key, try_to_typecast(key, value))
       end
 
@@ -111,6 +112,11 @@ module Mongoid #:nodoc:
           value.map { |v| typecast_value_for(field, v) }
         when Regexp
           value
+        when Range
+          {
+            "$gte" => typecast_value_for(field, value.first),
+            "$lte" => typecast_value_for(field, value.last)
+          }
         else
           if field.type == Array
             Serialization.mongoize(value, value.class)

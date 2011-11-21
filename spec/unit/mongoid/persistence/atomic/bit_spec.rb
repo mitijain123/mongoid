@@ -10,6 +10,10 @@ describe Mongoid::Persistence::Atomic::Bit do
     person.stubs(:collection).returns(collection)
   end
 
+  after do
+    person.unstub(:collection)
+  end
+
   describe "#persist" do
 
     context "when the field does not exist" do
@@ -51,7 +55,7 @@ describe Mongoid::Persistence::Atomic::Bit do
           person.new_record = false
           collection.expects(:update).with(
             person.atomic_selector,
-            { "$bit" => { :age => { :and => 13 } } },
+            { "$bit" => { "age" => { :and => 13 } } },
             :safe => false
           )
         end
@@ -87,7 +91,7 @@ describe Mongoid::Persistence::Atomic::Bit do
           person.new_record = false
           collection.expects(:update).with(
             person.atomic_selector,
-            { "$bit" => { :age => { :or => 13 } } },
+            { "$bit" => { "age" => { :or => 13 } } },
             :safe => false
           )
         end
@@ -130,7 +134,7 @@ describe Mongoid::Persistence::Atomic::Bit do
           person.new_record = false
           collection.expects(:update).with(
             person.atomic_selector,
-            { "$bit" => { :age => { :and => 13, :or => 10 } } },
+            { "$bit" => { "age" => { :and => 13, :or => 10 } } },
             :safe => false
           )
         end

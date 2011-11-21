@@ -4,28 +4,6 @@ module Mongoid #:nodoc:
     extend ActiveSupport::Concern
     include ActiveModel::Dirty
 
-    # Get the changed values for the document. This is a hash with the name of
-    # the field as the keys, and the values being an array of previous and
-    # current pairs.
-    #
-    # @example Get the changes.
-    #   document.changes
-    #
-    # @note This is overriding the AM::Dirty implementation to handle
-    #   enumerable fields being in the hash when not actually changed.
-    #
-    # @return [ Hash ] The changed values.
-    #
-    # @since 2.1.0
-    def changes
-      {}.tap do |hash|
-        changed.each do |name|
-          change = attribute_change(name)
-          hash[name] = change if change[0] != change[1]
-        end
-      end
-    end
-
     # Call this method after save, so the changes can be properly switched.
     #
     # This will unset the memoized children array, set new record to
@@ -38,7 +16,10 @@ module Mongoid #:nodoc:
     def move_changes
       @_children = nil
       @previously_changed = changes
-      @validated = false
+      atomic_pulls.clear
+      atomic_unsets.clear
+      delayed_atomic_sets.clear
+      delayed_atomic_pulls.clear
       changed_attributes.clear
     end
 
@@ -67,9 +48,62 @@ module Mongoid #:nodoc:
     def setters
       {}.tap do |modifications|
         changes.each_pair do |field, changes|
-          key = embedded? ? "#{atomic_position}.#{field}" : field
-          modifications[key] = changes[1]
+          if changes
+            key = embedded? ? "#{atomic_position}.#{field}" : field
+            modifications[key] = changes[1]
+          end
         end
+      end
+    end
+
+    private
+
+    # Get the current value for the specified attribute, if the attribute has changed.
+    #
+    # @note This is overriding the AM::Dirty implementation to read from the mongoid
+    #   attributes hash, which may contain a serialized version of the attributes data. It is
+    #   necessary to read the serialized version as the changed value, to allow updates to
+    #   the MongoDB document to persist correctly. For example, if a DateTime field is updated
+    #   it must be persisted as a UTC Time.
+    #
+    # @return [ Object ] The current value of the field, or nil if no change made.
+    #
+    # @since 2.1.0
+    def attribute_change(attr)
+      [changed_attributes[attr], attributes[attr]] if attribute_changed?(attr)
+    end
+
+    # Determine if a specific attribute has changed.
+    #
+    # @note Overriding AM::Dirty once again since their implementation is not
+    #   friendly to fields that can be changed in place.
+    #
+    # @param [ String ] attr The name of the attribute.
+    #
+    # @return [ true, false ] Whether the attribute has changed.
+    #
+    # @since 2.1.6
+    def attribute_changed?(attr)
+      return false unless changed_attributes.include?(attr)
+      changed_attributes[attr] != attributes[attr]
+    end
+
+    # Override Active Model's behaviour here in order to stay away from
+    # infinite loops on getter/setter overrides.
+    #
+    # @example Flag an attribute as changing.
+    #   document.attribute_will_change!(:name)
+    #
+    # @param [ Symbol ] attr The attribute.
+    #
+    # @return [ Object ] The value of the attribute.
+    #
+    # @since 2.3.0
+    def attribute_will_change!(attr)
+      unless changed_attributes.include?(attr)
+        value = read_attribute(attr)
+        value = value.duplicable? ? value.clone : value
+        changed_attributes[attr] = value
       end
     end
   end

@@ -1,7 +1,7 @@
 $LOAD_PATH.unshift(File.dirname(__FILE__))
 $LOAD_PATH.unshift(File.join(File.dirname(__FILE__), "..", "lib"))
 
-MODELS = File.join(File.dirname(__FILE__), "models")
+MODELS = File.join(File.dirname(__FILE__), "app/models")
 SUPPORT = File.join(File.dirname(__FILE__), "support")
 $LOAD_PATH.unshift(MODELS)
 $LOAD_PATH.unshift(SUPPORT)
@@ -9,12 +9,15 @@ $LOAD_PATH.unshift(SUPPORT)
 require "mongoid"
 require "mocha"
 require "rspec"
+require "ammeter/init"
 
 LOGGER = Logger.new($stdout)
+DATABASE_ID = Process.pid
 
 Mongoid.configure do |config|
-  name = "mongoid_test"
-  config.master = Mongo::Connection.new.db(name)
+  database = Mongo::Connection.new.db("mongoid_#{DATABASE_ID}")
+  database.add_user("mongoid", "test")
+  config.master = database
   config.logger = nil
 end
 
@@ -24,12 +27,13 @@ Dir[ File.join(SUPPORT, "*.rb") ].each { |file| require File.basename(file) }
 RSpec.configure do |config|
   config.mock_with(:mocha)
 
-  config.after(:suite) { Mongoid.purge! }
+  config.before(:each) do
+    Mongoid::IdentityMap.clear
+  end
 
-  # We filter out the specs that require authentication if the database has not
-  # had the mongoid user set up properly.
-  user_configured = Support::Authentication.configured?
-  warn(Support::Authentication.message) unless user_configured
+  config.after(:suite) do
+    Mongoid.master.connection.drop_database("mongoid_#{DATABASE_ID}")
+  end
 
   # We filter out specs that require authentication to MongoHQ if the
   # environment variables have not been set up locally.
@@ -38,10 +42,7 @@ RSpec.configure do |config|
 
   config.filter_run_excluding(:config => lambda { |value|
     return true if value == :mongohq && !mongohq_configured
-    return true if value == :user && !user_configured
   })
-
-  # config.filter_run :focus => true
 end
 
 ActiveSupport::Inflector.inflections do |inflect|

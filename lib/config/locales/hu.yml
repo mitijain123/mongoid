@@ -4,8 +4,15 @@ hu:
       messages:
         taken:
           már foglalt
+        callbacks:
+          "Calling %{method} on %{klass} resulted in a false return from a callback."
         document_not_found:
           "%{klass} osztályban, %{identifiers} id(k)-el nem található dokumentum."
+        eager_load:
+          "Eager loading :%{name} is not supported due to it being a many-to-many
+          or polymorphic belongs_to relation."
+        invalid_time:
+          "'%{value}' is not a valid Time."
         invalid_database:
           Az adatbázisnak Mongo::DB-nek kellene lennie, nem %{name}.
         invalid_type:
@@ -45,3 +52,6 @@ hu:
         unsaved_document:
           You cannot call create or create! through a relational association
           relation (%{document}) who's parent (%{base}) is not already saved.
+        mixed_relations:
+          Referencing a(n) %{embedded} document from the %{root} document via a
+          relational association is not allowed since the %{embedded} is embedded.

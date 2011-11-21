@@ -3,7 +3,7 @@ require "spec_helper"
 describe Mongoid::Fields::Serializable::Date do
 
   let(:field) do
-    described_class.new(:test, :type => Date)
+    described_class.instantiate(:test, :type => Date)
   end
 
   let!(:time) do
@@ -17,12 +17,12 @@ describe Mongoid::Fields::Serializable::Date do
     end
   end
 
-  describe "#default" do
+  describe "#eval_default" do
 
     context "when provided a proc" do
 
       let(:field) do
-        described_class.new(
+        described_class.instantiate(
           :test,
           :type => Date,
           :default => lambda { 1.day.ago }
@@ -30,7 +30,7 @@ describe Mongoid::Fields::Serializable::Date do
       end
 
       it "serializes the result of the call" do
-        field.default.should be_a(Time)
+        field.eval_default(nil).should be_a(Time)
       end
     end
   end
@@ -100,6 +100,20 @@ describe Mongoid::Fields::Serializable::Date do
 
       it "returns nil" do
         field.serialize("").should be_nil
+      end
+    end
+
+    # This is ridiculous - Ruby 1.8.x returns the current time when calling
+    # parse with a string that is not the time.
+    unless RUBY_VERSION =~ /1.8/
+
+      context "when the string is an invalid time" do
+
+        it "raises an error" do
+          expect {
+            field.serialize("shitty time")
+          }.to raise_error(Mongoid::Errors::InvalidTime)
+        end
       end
     end
 

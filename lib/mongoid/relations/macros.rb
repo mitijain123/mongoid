@@ -8,23 +8,22 @@ module Mongoid # :nodoc:
       extend ActiveSupport::Concern
 
       included do
-        cattr_accessor :embedded
+        class_attribute :embedded, :instance_reader => false
         class_attribute :relations
         self.embedded = false
         self.relations = {}
+      end
 
-        # For backwards compatibility, alias the class method for associations
-        # and embedding as well. Fix in related gems.
-        #
-        # @todo Affected libraries: Machinist
-        class << self
-          alias :associations :relations
-          alias :embedded? :embedded
-        end
-
-        # Convenience methods for the instance to know about attributes that
-        # are located at the class level.
-        delegate :associations, :relations, :to => "self.class"
+      # This is convenience for librarys still on the old API.
+      #
+      # @example Get the associations.
+      #   person.associations
+      #
+      # @return [ Hash ] The relations.
+      #
+      # @since 2.3.1
+      def associations
+        self.relations
       end
 
       module ClassMethods #:nodoc:
@@ -116,18 +115,18 @@ module Mongoid # :nodoc:
         #
         #   class Game
         #     include Mongoid::Document
-        #     referenced_in :person
+        #     belongs_to :person
         #   end
         #
         #   class Person
         #     include Mongoid::Document
-        #     references_one :game
+        #     has_one :game
         #   end
         #
         # @param [ Symbol ] name The name of the relation.
         # @param [ Hash ] options The relation options.
         # @param [ Proc ] block Optional block for defining extensions.
-        def referenced_in(name, options = {}, &block)
+        def belongs_to(name, options = {}, &block)
           characterize(name, Referenced::In, options, &block).tap do |meta|
             relate(name, meta)
             reference(meta)
@@ -135,8 +134,8 @@ module Mongoid # :nodoc:
             validates_relation(meta)
           end
         end
-        alias :belongs_to_related :referenced_in
-        alias :belongs_to :referenced_in
+        alias :belongs_to_related :belongs_to
+        alias :referenced_in :belongs_to
 
         # Adds a relational association from a parent Document to many
         # Documents in another database or collection.
@@ -145,18 +144,18 @@ module Mongoid # :nodoc:
         #
         #   class Person
         #     include Mongoid::Document
-        #     references_many :posts
+        #     has_many :posts
         #   end
         #
         #   class Game
         #     include Mongoid::Document
-        #     referenced_in :person
+        #     belongs_to :person
         #   end
         #
         # @param [ Symbol ] name The name of the relation.
         # @param [ Hash ] options The relation options.
         # @param [ Proc ] block Optional block for defining extensions.
-        def references_many(name, options = {}, &block)
+        def has_many(name, options = {}, &block)
           characterize(name, Referenced::Many, options, &block).tap do |meta|
             relate(name, meta)
             reference(meta)
@@ -164,8 +163,8 @@ module Mongoid # :nodoc:
             validates_relation(meta)
           end
         end
-        alias :has_many_related :references_many
-        alias :has_many :references_many
+        alias :has_many_related :has_many
+        alias :references_many :has_many
 
         # Adds a relational many-to-many association between many of this
         # Document and many of another Document.
@@ -174,12 +173,12 @@ module Mongoid # :nodoc:
         #
         #   class Person
         #     include Mongoid::Document
-        #     references_and_referenced_in_many :preferences
+        #     has_and_belongs_to_many :preferences
         #   end
         #
         #   class Preference
         #     include Mongoid::Document
-        #     references_and_referenced_in_many :people
+        #     has_and_belongs_to_many :people
         #   end
         #
         # @param [ Symbol ] name The name of the relation.
@@ -187,15 +186,16 @@ module Mongoid # :nodoc:
         # @param [ Proc ] block Optional block for defining extensions.
         #
         # @since 2.0.0.rc.1
-        def references_and_referenced_in_many(name, options = {}, &block)
+        def has_and_belongs_to_many(name, options = {}, &block)
           characterize(name, Referenced::ManyToMany, options, &block).tap do |meta|
             relate(name, meta)
             reference(meta, Array)
             autosave(meta)
             validates_relation(meta)
+            synced(meta)
           end
         end
-        alias :has_and_belongs_to_many :references_and_referenced_in_many
+        alias :references_and_referenced_in_many :has_and_belongs_to_many
 
         # Adds a relational association from the child Document to a Document in
         # another database or collection.
@@ -204,18 +204,18 @@ module Mongoid # :nodoc:
         #
         #   class Game
         #     include Mongoid::Document
-        #     referenced_in :person
+        #     belongs_to :person
         #   end
         #
         #   class Person
         #     include Mongoid::Document
-        #     references_one :game
+        #     has_one :game
         #   end
         #
         # @param [ Symbol ] name The name of the relation.
         # @param [ Hash ] options The relation options.
         # @param [ Proc ] block Optional block for defining extensions.
-        def references_one(name, options = {}, &block)
+        def has_one(name, options = {}, &block)
           characterize(name, Referenced::One, options, &block).tap do |meta|
             relate(name, meta)
             reference(meta)
@@ -223,8 +223,8 @@ module Mongoid # :nodoc:
             validates_relation(meta)
           end
         end
-        alias :has_one_related :references_one
-        alias :has_one :references_one
+        alias :has_one_related :has_one
+        alias :references_one :has_one
 
         private
 
@@ -240,14 +240,12 @@ module Mongoid # :nodoc:
         #
         # @return [ Metadata ] The metadata for the relation.
         def characterize(name, relation, options, &block)
-          Metadata.new(
-            options.merge(
-              :relation => relation,
-              :extend => create_extension_module(name, &block),
-              :inverse_class_name => self.name,
-              :name => name
-            )
-          )
+          Metadata.new({
+            :relation => relation,
+            :extend => create_extension_module(name, &block),
+            :inverse_class_name => self.name,
+            :name => name
+          }.merge(options))
         end
 
         # Generate a named extension module suitable for marshaling

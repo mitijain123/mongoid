@@ -33,6 +33,36 @@ describe Mongoid::Relations::Cyclic do
         document.should respond_to(:child_entries)
       end
     end
+
+    context "when the document is namespaced" do
+
+      let(:document) do
+        Trees::Node.new
+      end
+
+      it "creates the parent relation" do
+        document.should respond_to(:parent_node)
+      end
+
+      it "creates the child relation" do
+        document.should respond_to(:child_nodes)
+      end
+    end
+
+    context "when the classes are namespaced" do
+
+      let(:document) do
+        Fruits::Apple.new
+      end
+
+      it "creates the parent relation" do
+        document.should respond_to(:parent_apple)
+      end
+
+      it "creates the child relation" do
+        document.should respond_to(:child_apples)
+      end
+    end
   end
 
   describe ".recursively_embeds_one" do

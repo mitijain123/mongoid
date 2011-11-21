@@ -2,6 +2,7 @@
 coverage/*
 pkg/*
 scratch_directory/*
+sandbox/*
 tmp/*
 *.gem
 .bundle
@@ -19,3 +20,4 @@ doc/*
 *.profile
 *.profile.pdf
 *.symbols
+.idea/

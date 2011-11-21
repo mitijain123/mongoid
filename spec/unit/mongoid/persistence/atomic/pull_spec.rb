@@ -10,6 +10,10 @@ describe Mongoid::Persistence::Atomic::Pull do
     person.stubs(:collection).returns(collection)
   end
 
+  after do
+    person.unstub(:collection)
+  end
+
   describe "#persist" do
 
     context "when the field exists" do
@@ -26,7 +30,7 @@ describe Mongoid::Persistence::Atomic::Pull do
         person.new_record = false
         collection.expects(:update).with(
           person.atomic_selector,
-          { "$pull" => { :aliases => "008" } },
+          { "$pull" => { "aliases" => "008" } },
           { :safe => false }
         )
       end

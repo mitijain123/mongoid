@@ -1,10 +1,19 @@
 rvm:
-  - ruby-head
-  - 1.9.2
   - 1.8.7
-  - ree
+  - 1.9.2
+  - 1.9.3
+  - ruby-head
   - jruby
   - rbx
-  - rbx-2.0.0pre
-before_script:
-  - mongo mongoid_test --eval 'db.addUser("mongoid", "test");'
+  - rbx-2.0
+  - ree
+notifications:
+  email:
+    - durran@gmail.com
+    - arunagw@gmail.com
+    - cgriego@gmail.com
+    - mail@etehtsea.me
+    - gregory@kaddabra.co.il
+    - nick@deadorange.com
+    - paul@codingfrontier.com
+    - bj.schaefer@gmail.com

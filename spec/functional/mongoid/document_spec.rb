@@ -6,6 +6,18 @@ describe Mongoid::Document do
     Person.delete_all
   end
 
+  describe "#initialize" do
+
+    context "when providing a block" do
+
+      it "sets the defaults before yielding" do
+        Person.new do |person|
+          person.age.should eq(100)
+        end
+      end
+    end
+  end
+
   context "defining a BSON::ObjectId as a field" do
 
     let(:bson_id) do
@@ -63,8 +75,11 @@ describe Mongoid::Document do
   end
 
   context "becoming another class" do
+
     before(:all) do
-      class Manager < Person; end
+      class Manager < Person
+        field :level, :type => Integer, :default => 1
+      end
     end
 
     %w{upcasting downcasting}.each do |ctx|
@@ -113,9 +128,22 @@ describe Mongoid::Document do
           became.errors.should include(:ssn)
         end
 
+        it "sets the class type" do
+          became = @obj.becomes(@to_become)
+          became._type.should == @to_become.to_s
+        end
+
         it "raises an error when inappropriate class is provided" do
           lambda {@obj.becomes(String)}.should raise_error(ArgumentError)
         end
+      end
+    end
+
+    context "upcasting to class with default attributes" do
+
+      it "applies default attributes" do
+        @obj = Person.new(:title => 'Sir').becomes(Manager)
+        @obj.level.should == 1
       end
     end
   end
@@ -256,7 +284,7 @@ describe Mongoid::Document do
         @person.addresses.first.destroy
         @person.name.should_not be_nil
         @person.name.destroy
-        @person.addresses.first.should be_nil
+        @person.addresses.should be_empty
         @person.name.should be_nil
       end
     end
@@ -334,112 +362,6 @@ describe Mongoid::Document do
     it "is a single object and not an array" do
       @from_db = PetOwner.find(@owner.id)
       @from_db.address.should == @address
-    end
-  end
-
-  describe "#reload" do
-
-    let(:person) do
-      Person.create(:ssn => "112-11-1121", :title => "Sir")
-    end
-
-    let!(:from_db) do
-      Person.find(person.id).tap do |peep|
-        peep.age = 35
-        peep.save
-      end
-    end
-
-    it "reloads the object attributes from the db" do
-      person.reload
-      person.age.should == 35
-    end
-
-    it "reload should return self" do
-      person.reload.should == from_db
-    end
-
-    context "when the document was dirty" do
-
-      let(:person) do
-        Person.create(:ssn => "543-24-2341")
-      end
-
-      before do
-        person.title = "Sir"
-        person.reload
-      end
-
-      it "resets the dirty modifications" do
-        person.changes.should be_empty
-      end
-    end
-
-    context "when document not saved" do
-
-      context "when raising not found error" do
-
-        it "raises an error" do
-          lambda { Person.new.reload }.should raise_error(Mongoid::Errors::DocumentNotFound)
-        end
-      end
-    end
-
-    context "when embedded documents change" do
-
-      let!(:address) do
-        person.addresses.create(:number => 27, :street => "Maiden Lane")
-      end
-
-      before do
-        Person.collection.update(
-          { "_id" => person.id }, { "$set" => { "addresses" => [] } }
-        )
-        person.reload
-      end
-
-      it "should reload the association" do
-        person.addresses.should == []
-      end
-    end
-
-    context "with relational associations" do
-
-      context "for a references_one" do
-
-        let!(:game) do
-          person.create_game(:score => 50)
-        end
-
-        before do
-          Game.collection.update(
-            { "_id" => game.id }, { "$set" => { "score" => 75 } }
-          )
-          person.reload
-        end
-
-        it "should reload the association" do
-          person.game.score.should == 75
-        end
-      end
-
-      context "for a referenced_in" do
-
-        let!(:game) do
-          person.create_game(:score => 50)
-        end
-
-        before do
-          Person.collection.update(
-            { "_id" => person.id }, { "$set" => { "title" => "Mam" } }
-          )
-          game.reload
-        end
-
-        it "should reload the association" do
-          game.person.title.should == "Mam"
-        end
-      end
     end
   end
 

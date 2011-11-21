@@ -4,10 +4,17 @@ pt:
       messages:
         taken:
           já está utilizada
+        callbacks:
+          "Calling %{method} on %{klass} resulted in a false return from a callback."
         document_not_found:
           Nenhum documento encontrado para a classe %{klass} com os id(s) %{identifiers}.
+        eager_load:
+          "Eager loading :%{name} is not supported due to it being a many-to-many
+          or polymorphic belongs_to relation."
         invalid_database:
           A base de dados deverá ser uma Mongo::DB, em vez de %{name}.
+        invalid_time:
+          "'%{value}' is not a valid Time."
         invalid_type:
           O campo foi definido como %{klass}, mas recebeu uma instância de %{other} com
           o valor %{value}.
@@ -41,3 +48,6 @@ pt:
         unsaved_document:
           You cannot call create or create! through a relational association
           relation (%{document}) who's parent (%{base}) is not already saved.
+        mixed_relations:
+          Referencing a(n) %{embedded} document from the %{root} document via a
+          relational association is not allowed since the %{embedded} is embedded.

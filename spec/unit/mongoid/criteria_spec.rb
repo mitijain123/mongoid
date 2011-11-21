@@ -237,6 +237,28 @@ describe Mongoid::Criteria do
       end
     end
 
+    describe "#size" do
+
+      before do
+        context.expects(:size).returns(10)
+      end
+
+      it "delegates to the context" do
+        criteria.size.should == 10
+      end
+    end
+
+    describe "#length" do
+
+      before do
+        context.expects(:length).returns(10)
+      end
+
+      it "delegates to the context" do
+        criteria.length.should == 10
+      end
+    end
+
     describe "#exists?" do
 
       context "when there are documents in the db" do
@@ -923,6 +945,15 @@ describe Mongoid::Criteria do
 
     context "with a single argument" do
 
+      context "when the arg is nil" do
+
+        it "adds the id selector" do
+          expect {
+            criteria.search(nil)
+          }.to raise_error(Mongoid::Errors::InvalidFind)
+        end
+      end
+
       context "when the arg is a string" do
 
         let(:id) do
@@ -930,7 +961,9 @@ describe Mongoid::Criteria do
         end
 
         it "adds the id selector" do
-          criteria.search(id)[1].selector.should == { :_id => BSON::ObjectId.from_string(id) }
+          criteria.search(id)[1].selector.should eq(
+            { :_id => BSON::ObjectId.from_string(id) }
+          )
         end
       end
 
@@ -941,7 +974,7 @@ describe Mongoid::Criteria do
         end
 
         it "adds the id selector" do
-          criteria.search(id)[1].selector.should == { :_id => id }
+          criteria.search(id)[1].selector.should eq({ :_id => id })
         end
       end
     end

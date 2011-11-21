@@ -1,6 +1,5 @@
 # encoding: utf-8
 module Mongoid #:nodoc:
-
   module Timestamps
     # This module handles the behaviour for setting up document updated at
     # timestamp.
@@ -8,16 +7,10 @@ module Mongoid #:nodoc:
       extend ActiveSupport::Concern
 
       included do
-        field :updated_at, :type => Time
-
+        field :updated_at, :type => Time, :versioned => false
         set_callback :save, :before, :set_updated_at, :if => Proc.new { |doc|
-          doc.new_record? || doc.changed?
+          doc.timestamping? && (doc.new_record? || doc.changed?)
         }
-
-        unless methods.include? 'record_timestamps'
-          class_attribute :record_timestamps
-          self.record_timestamps = true
-        end
       end
 
       # Update the updated_at field on the Document to the current time.
@@ -26,7 +19,7 @@ module Mongoid #:nodoc:
       # @example Set the updated at time.
       #   person.set_updated_at
       def set_updated_at
-        self.updated_at = Time.now.utc unless self.updated_at_changed?
+        self.updated_at = Time.now.utc unless updated_at_changed?
       end
     end
   end
